@@ -1,36 +1,20 @@
 # FlowGram
 
-Buffer management + floating wave animation for terminal LLM users.
+Buffer management for terminal users.
 
-## Install (one command)
+## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Davidtzuke/FlowGram/main/flowgram.zsh -o ~/.flowgram.zsh && FLOWGRAM_AUTO_INSTALL=1 source ~/.flowgram.zsh
+curl -fsSL https://raw.githubusercontent.com/Davidtzuke/FlowGram/main/flowgram.zsh -o ~/.flowgram.zsh && source ~/.flowgram.zsh --install
 ```
 
-That's it. Works instantly.
+## Keys
 
-## Keybindings
-
-| Keys | Action |
-|------|--------|
-| `Ctrl+A` / `Cmd+A` | Select all |
-| `Ctrl+K` / `Cmd+K` | Nuke buffer (with undo) |
-| `Ctrl+Z` / `Cmd+Z` | Restore nuked content |
-| `Ctrl+Delete` | Toggle animation on/off |
-
-## Features
-
-- **Wave animation**: "flowgram" floats in your prompt with a wave effect
-- **Nuke & Undo**: Clear your buffer instantly, restore it anytime
-- **Select All**: Visual selection of entire buffer
-- **Non-blocking**: Animation runs in background, won't freeze terminal
-
-## Requirements
-
-- Zsh
-- macOS or Linux
-- Unicode-capable terminal
+| Key | Action |
+|-----|--------|
+| Ctrl+A | Select all |
+| Ctrl+K | Nuke (clear with undo) |
+| Ctrl+Z | Restore |
 
 ## License
 

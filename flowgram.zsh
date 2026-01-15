@@ -1,195 +1,133 @@
 #!/usr/bin/env zsh
-# ============================================================================
-# flowgram.zsh - Buffer management + floating animation for terminal LLM users
-# ============================================================================
-# One-click install: curl -fsSL bit.ly/flowgram | zsh
-# ============================================================================
+# flowgram.zsh - Minimal buffer management widgets
+# Select All (Ctrl+A), Nuke (Ctrl+K), Undo (Ctrl+Z)
 
-FLOWGRAM_CACHE_FILE="${HOME}/.flowgram_undo"
-FLOWGRAM_ANIM_FILE="/tmp/.flowgram_anim_$$"
-FLOWGRAM_ANIM_ENABLED=1
-FLOWGRAM_UPDATE_INTERVAL=0.1
+FLOWGRAM_UNDO="${HOME}/.flowgram_undo"
 
-# Kill existing animation on re-source
-[[ -n "$FLOWGRAM_ANIM_PID" ]] && kill "$FLOWGRAM_ANIM_PID" 2>/dev/null
-rm -f /tmp/.flowgram_anim_* 2>/dev/null
+# Brief feedback in bottom-right corner
+_flowgram_feedback() {
+    local msg="$1"
+    local cols=$(tput cols)
+    local rows=$(tput lines)
+    local col=$((cols - ${#msg} - 1))
 
-# ============================================================================
-# Notifications (bottom-right corner)
-# ============================================================================
-_flowgram_notify() {
-    local msg="$1" color="$2"
-    local cc="" reset="\033[0m" dim="\033[2m"
-    case "$color" in
-        red) cc="\033[91m";; green) cc="\033[92m";;
-        yellow) cc="\033[93m";; cyan) cc="\033[96m";; *) cc="\033[97m";;
-    esac
-    local w=$(tput cols) h=$(tput lines) l=${#msg}
-    local c=$((w - l - 2)) r=$((h - 1))
-    (( c < 1 )) && c=1
-    { tput sc; tput cup "$r" "$c"; printf "${dim}${cc}%s${reset}" "$msg"; tput rc; } 2>/dev/null
-    { sleep 0.5; tput sc; tput cup "$r" "$c"; printf "%*s" "$((l+1))" ""; tput rc; } &>/dev/null &
-    disown 2>/dev/null
+    # Save cursor, move to bottom-right, print reversed, restore cursor
+    tput sc
+    tput cup $((rows - 1)) "$col"
+    tput rev
+    printf '%s' "$msg"
+    tput sgr0
+    tput rc
+
+    # Clear after 0.5s in background
+    {
+        sleep 0.5
+        tput sc
+        tput cup $((rows - 1)) "$col"
+        printf '%*s' "${#msg}" ""
+        tput rc
+    } &!
 }
 
-# ============================================================================
-# Wave Animation
-# ============================================================================
-typeset -a _FG_W=("▁" "▂" "▃" "▄" "▅" "▆" "▇" "█" "▇" "▆" "▅" "▄" "▃" "▂" "▁" " ")
-typeset -a _FG_C=("%F{39}" "%F{44}" "%F{49}" "%F{84}" "%F{119}" "%F{154}" "%F{184}" "%F{214}")
-typeset -a _FG_P=(0 2 4 6 8 10 12 14)
-
-_flowgram_wave_loop() {
-    local f="$1" t=0
-    while true; do
-        local o=""
-        for ((i=1;i<=8;i++)); do
-            local idx=$(((t+_FG_P[i])%16+1))
-            o+="%F{240}${_FG_W[idx]}%f${_FG_C[i]}flowgram"[$i]"%f"
-        done
-        print -n "$o" > "$f"
-        ((t++))
-        sleep 0.1
-    done
-}
-
-_flowgram_get_anim() {
-    [[ "$FLOWGRAM_ANIM_ENABLED" -eq 1 && -r "$FLOWGRAM_ANIM_FILE" ]] && cat "$FLOWGRAM_ANIM_FILE" 2>/dev/null || print -n ""
-}
-
-_flowgram_anim_start() {
-    [[ -n "$FLOWGRAM_ANIM_PID" ]] && kill "$FLOWGRAM_ANIM_PID" 2>/dev/null
-    FLOWGRAM_ANIM_FILE="/tmp/.flowgram_anim_$$"
-    print -n "flowgram" > "$FLOWGRAM_ANIM_FILE"
-    _flowgram_wave_loop "$FLOWGRAM_ANIM_FILE" &!
-    FLOWGRAM_ANIM_PID=$!
-}
-
-_flowgram_anim_stop() {
-    [[ -n "$FLOWGRAM_ANIM_PID" ]] && kill "$FLOWGRAM_ANIM_PID" 2>/dev/null
-    unset FLOWGRAM_ANIM_PID
-    rm -f "$FLOWGRAM_ANIM_FILE" 2>/dev/null
-}
-
-# ============================================================================
-# Widgets
-# ============================================================================
-_flowgram_toggle() {
-    if [[ "$FLOWGRAM_ANIM_ENABLED" -eq 1 ]]; then
-        FLOWGRAM_ANIM_ENABLED=0; _flowgram_anim_stop; _flowgram_notify "[anim off]" "yellow"
-    else
-        FLOWGRAM_ANIM_ENABLED=1; _flowgram_anim_start; _flowgram_notify "[anim on]" "green"
-    fi
+# Select All - select entire buffer
+_flowgram_select_all() {
+    [[ -z "$BUFFER" ]] && return
+    MARK=0
+    CURSOR=${#BUFFER}
+    REGION_ACTIVE=1
+    _flowgram_feedback "[selected]"
     zle -R
 }
 
-_flowgram_select_all() {
-    [[ -z "$BUFFER" ]] && { _flowgram_notify "[ empty ]" "yellow"; return; }
-    MARK=0; CURSOR=${#BUFFER}; zle set-mark-command; REGION_ACTIVE=1
-    _flowgram_notify "[selected]" "cyan"; zle -R
-}
-
+# Nuke - save buffer to undo file and clear
 _flowgram_nuke() {
-    [[ -z "$BUFFER" ]] && { _flowgram_notify "[ empty ]" "yellow"; return; }
-    printf '%s' "$BUFFER" > "$FLOWGRAM_CACHE_FILE"
-    BUFFER=""; CURSOR=0; REGION_ACTIVE=0
-    _flowgram_notify "[ nuked ]" "red"; zle -R
+    [[ -z "$BUFFER" ]] && return
+    printf '%s' "$BUFFER" > "$FLOWGRAM_UNDO"
+    BUFFER=""
+    CURSOR=0
+    _flowgram_feedback "[nuked]"
+    zle -R
 }
 
+# Undo - restore from undo file
 _flowgram_undo() {
-    [[ ! -r "$FLOWGRAM_CACHE_FILE" ]] && { _flowgram_notify "[no undo]" "yellow"; return; }
-    local c=$(<"$FLOWGRAM_CACHE_FILE")
-    [[ -z "$c" ]] && { _flowgram_notify "[no undo]" "yellow"; return; }
-    BUFFER="$c"; CURSOR=${#BUFFER}; : > "$FLOWGRAM_CACHE_FILE"
-    _flowgram_notify "[restore]" "green"; zle -R
+    [[ ! -r "$FLOWGRAM_UNDO" ]] && return
+    local saved
+    saved=$(<"$FLOWGRAM_UNDO")
+    [[ -z "$saved" ]] && return
+    BUFFER="$saved"
+    CURSOR=${#BUFFER}
+    : > "$FLOWGRAM_UNDO"
+    _flowgram_feedback "[restored]"
+    zle -R
 }
 
+# Register widgets
 zle -N flowgram-select-all _flowgram_select_all
 zle -N flowgram-nuke _flowgram_nuke
 zle -N flowgram-undo _flowgram_undo
-zle -N flowgram-toggle _flowgram_toggle
 
-# ============================================================================
 # Keybindings
-# ============================================================================
-bindkey '^a' flowgram-select-all
-bindkey '^k' flowgram-nuke
-bindkey '^z' flowgram-undo
+# Ctrl variants
+bindkey '^A' flowgram-select-all
+bindkey '^K' flowgram-nuke
+bindkey '^Z' flowgram-undo
+
+# Alt/Meta variants (for terminals that send Cmd as Alt)
 bindkey '\ea' flowgram-select-all
 bindkey '\ek' flowgram-nuke
 bindkey '\ez' flowgram-undo
-bindkey '^[[3;6~' flowgram-toggle
-bindkey '^[[3;5~' flowgram-toggle
-bindkey '\e^?' flowgram-toggle
 
 # ============================================================================
-# Prompt
+# Auto-Install
+# Usage: zsh flowgram.zsh install
+#    or: curl -fsSL <url>/flowgram.zsh | zsh -s -- install
 # ============================================================================
-setopt PROMPT_SUBST
-[[ -z "$FLOWGRAM_ORIG_PROMPT" ]] && FLOWGRAM_ORIG_PROMPT="$PROMPT"
-PROMPT='$(_flowgram_get_anim) %F{245}%1~%f %F{white}>%f '
+flowgram_install() {
+    local src="${0:a}"
+    local dest="${HOME}/.flowgram.zsh"
+    local source_line='[[ -f ~/.flowgram.zsh ]] && source ~/.flowgram.zsh'
+    local rc_file=""
 
-# Cleanup on exit
-trap '_flowgram_anim_stop' EXIT HUP TERM INT
-
-# ============================================================================
-# Auto-Install (downloads to ~/.flowgram.zsh and adds to shell config)
-# ============================================================================
-_flowgram_auto_install() {
-    local target="$HOME/.flowgram.zsh"
-    local zshrc="$HOME/.zshrc"
-    local src='[[ -f ~/.flowgram.zsh ]] && source ~/.flowgram.zsh'
-
-    # Download if running from curl pipe
-    if [[ ! -f "$target" ]] || [[ "${FLOWGRAM_FORCE_INSTALL:-}" == "1" ]]; then
-        curl -fsSL "https://raw.githubusercontent.com/Davidtzuke/FlowGram/main/flowgram.zsh" -o "$target" 2>/dev/null
-    fi
-
-    # Try to add to .zshrc
-    if [[ -f "$zshrc" ]]; then
-        if grep -q "flowgram.zsh" "$zshrc" 2>/dev/null; then
-            return 0  # Already installed
-        fi
-        if [[ -w "$zshrc" ]]; then
-            echo "" >> "$zshrc"
-            echo "# flowgram" >> "$zshrc"
-            echo "$src" >> "$zshrc"
-            return 0
-        fi
+    # Copy script to home
+    if [[ -f "$src" ]]; then
+        cp "$src" "$dest" || { echo "Error: Cannot copy to $dest"; return 1; }
+    elif [[ -t 0 ]]; then
+        echo "Error: No source file found"
+        return 1
     else
-        # Create new .zshrc
-        echo "$src" > "$zshrc" 2>/dev/null && return 0
+        # Reading from stdin (curl pipe)
+        cat > "$dest" || { echo "Error: Cannot write to $dest"; return 1; }
     fi
+    chmod +x "$dest"
 
-    # If we can't write to .zshrc, try .zprofile
-    local zprof="$HOME/.zprofile"
-    if [[ ! -f "$zprof" ]] || [[ -w "$zprof" ]]; then
-        if ! grep -q "flowgram.zsh" "$zprof" 2>/dev/null; then
-            echo "" >> "$zprof"
-            echo "# flowgram" >> "$zprof"
-            echo "$src" >> "$zprof"
-            return 0
+    # Find writable rc file
+    for f in "${HOME}/.zshrc" "${HOME}/.zprofile"; do
+        if [[ -w "$f" ]] || [[ ! -e "$f" ]]; then
+            rc_file="$f"
+            break
         fi
+    done
+
+    [[ -z "$rc_file" ]] && { echo "Error: No writable .zshrc or .zprofile"; return 1; }
+
+    # Add source line if not present
+    if ! grep -qF '.flowgram.zsh' "$rc_file" 2>/dev/null; then
+        printf '\n# flowgram\n%s\n' "$source_line" >> "$rc_file"
+        echo "Installed to $dest"
+        echo "Added source line to $rc_file"
+    else
+        echo "Already installed in $rc_file"
     fi
 
-    return 1
+    echo ""
+    echo "Restart shell or run: source ~/.flowgram.zsh"
+    echo ""
+    echo "Keys:"
+    echo "  Ctrl+A  Select all"
+    echo "  Ctrl+K  Nuke (clear + save)"
+    echo "  Ctrl+Z  Undo (restore)"
 }
 
-# ============================================================================
-# Main
-# ============================================================================
-if [[ "${1:-}" == "--install" ]] || [[ -n "$FLOWGRAM_AUTO_INSTALL" ]]; then
-    _flowgram_auto_install
-    if [[ $? -eq 0 ]]; then
-        echo "\033[92m[flowgram]\033[0m Installed! Restart terminal or run: source ~/.zshrc"
-    else
-        echo "\033[93m[flowgram]\033[0m Loaded for this session."
-        echo "  To persist, add to your shell config:"
-        echo '  [[ -f ~/.flowgram.zsh ]] && source ~/.flowgram.zsh'
-    fi
-    echo ""
-    echo "  Keys: ^A select | ^K nuke | ^Z undo | Ctrl+Del toggle anim"
-fi
-
-# Start animation
-[[ -o interactive ]] && _flowgram_anim_start
+# Handle install argument
+[[ "$1" == "install" ]] && { flowgram_install; return 0 2>/dev/null || exit 0; }
