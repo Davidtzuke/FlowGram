@@ -1,58 +1,76 @@
 # FlowGram
 
-High-fidelity buffer management for terminal LLM users. A single-file Zsh script that adds powerful keyboard shortcuts for managing your command line buffer.
+High-fidelity buffer management and animated prompt for terminal LLM users.
 
-## Features
+## Scripts
+
+| Script | Description |
+|--------|-------------|
+| `flowgram.zsh` | Buffer management keybindings |
+| `flowgram-anim.zsh` | Floating wave animation for prompt |
+
+---
+
+## flowgram.zsh - Buffer Management
+
+Ctrl and Cmd keys do the same thing:
 
 | Keybinding | Action | Description |
 |------------|--------|-------------|
-| `Ctrl+A` | Select All | Visually highlights entire buffer |
-| `Ctrl+K` | Nuke | Clears buffer (saves to undo cache) |
-| `Ctrl+Z` | Undo | Restores last nuked content |
+| `Ctrl+A` / `Cmd+A` | Select All | Visually highlights entire buffer |
+| `Ctrl+K` / `Cmd+K` | Nuke | Clears buffer (saves to undo cache) |
+| `Ctrl+Z` / `Cmd+Z` | Undo | Restores last nuked content |
 
-All actions display a subtle animation in the bottom-right corner that disappears after 500ms.
-
-## Installation
-
-### Quick Install (recommended)
+### Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Davidtzuke/FlowGram/main/flowgram.zsh -o ~/.flowgram.zsh
 source ~/.flowgram.zsh --install
 ```
 
-### Manual Install
+---
 
-1. Clone the repo:
-```bash
-git clone https://github.com/Davidtzuke/FlowGram.git
+## flowgram-anim.zsh - Wave Animation
+
+A floating ASCII wave animation that displays "flowgram" in your prompt. Each letter moves up and down independently using Unicode block elements.
+
+```
+▃f▅l▇o█w▇g▅r▃a▁m
 ```
 
-2. Source and install:
-```bash
-cd FlowGram
-source flowgram.zsh --install
-```
+### Install
 
-3. Restart your terminal or run:
 ```bash
+curl -fsSL https://raw.githubusercontent.com/Davidtzuke/FlowGram/main/flowgram-anim.zsh -o ~/.flowgram-anim.zsh
+echo 'source ~/.flowgram-anim.zsh' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-## Usage
+### Commands
 
-Once installed, the keybindings are active in any Zsh session:
+| Command | Description |
+|---------|-------------|
+| `flowgram-anim-start` | Start the animation |
+| `flowgram-anim-stop` | Stop the animation |
+| `flowgram-anim-restart` | Restart the animation |
+| `flowgram-anim-status` | Check if running |
+| `flowgram-prompt-restore` | Restore original prompt |
 
-- Type something, press `Ctrl+K` to nuke it
-- Press `Ctrl+Z` to bring it back
-- Press `Ctrl+A` to select everything
+### Custom Prompt
 
-The undo cache persists at `~/.flowgram_undo`, so you can recover even after closing the terminal.
+Edit your PROMPT after sourcing:
+
+```bash
+PROMPT='$(_flowgram_get_anim) %F{245}%~%f ❯ '
+```
+
+---
 
 ## Requirements
 
 - Zsh shell
-- macOS or Linux with `tput` available
+- macOS or Linux
+- Terminal with Unicode support
 
 ## License
 

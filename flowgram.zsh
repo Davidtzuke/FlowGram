@@ -200,14 +200,27 @@ zle -N flowgram-undo _flowgram_undo
 # ============================================================================
 # Keybindings
 # ============================================================================
-# ^a (Ctrl+A) - Select All
-# ^k (Ctrl+K) - Nuke buffer
-# ^z (Ctrl+Z) - Undo/Restore
+# Ctrl and Cmd (Meta) keys do the same thing
+#
+# Select All:  Ctrl+A / Cmd+A
+# Nuke buffer: Ctrl+K / Cmd+K
+# Undo:        Ctrl+Z / Cmd+Z
 # ============================================================================
 
+# Ctrl bindings
 bindkey '^a' flowgram-select-all
 bindkey '^k' flowgram-nuke
 bindkey '^z' flowgram-undo
+
+# Cmd/Meta bindings (Escape sequences sent by terminal for Cmd+key)
+bindkey '\ea' flowgram-select-all   # Cmd+A / Meta+A / Esc then A
+bindkey '\ek' flowgram-nuke         # Cmd+K / Meta+K / Esc then K
+bindkey '\ez' flowgram-undo         # Cmd+Z / Meta+Z / Esc then Z
+
+# Alternative escape sequences (some terminals use these)
+bindkey '^[a' flowgram-select-all
+bindkey '^[k' flowgram-nuke
+bindkey '^[z' flowgram-undo
 
 # ============================================================================
 # Self-Installation Handler
@@ -229,6 +242,31 @@ _flowgram_install() {
         return 0
     fi
 
+    # Check if .zshrc exists
+    if [[ ! -f "$zshrc_path" ]]; then
+        # Create .zshrc if it doesn't exist
+        touch "$zshrc_path" 2>/dev/null
+        if [[ $? -ne 0 ]]; then
+            echo "\033[91m[flowgram]\033[0m Could not create .zshrc"
+            echo ""
+            echo "  Manual install - add this line to your shell config:"
+            echo "    $source_line"
+            return 1
+        fi
+    fi
+
+    # Check if .zshrc is writable
+    if [[ ! -w "$zshrc_path" ]]; then
+        echo "\033[93m[flowgram]\033[0m .zshrc is not writable (owned by another user)"
+        echo ""
+        echo "  Fix with:  sudo chown \$(whoami) ~/.zshrc"
+        echo "  Then run:  source ${script_path} --install"
+        echo ""
+        echo "  Or manually add this line to your shell config:"
+        echo "    $source_line"
+        return 1
+    fi
+
     # Append to .zshrc
     {
         echo ""
@@ -240,15 +278,17 @@ _flowgram_install() {
         echo "\033[92m[flowgram]\033[0m Successfully installed!"
         echo "           Added to: $zshrc_path"
         echo ""
-        echo "  Keybindings:"
-        echo "    Ctrl+A  Select entire buffer"
-        echo "    Ctrl+K  Nuke buffer (with undo cache)"
-        echo "    Ctrl+Z  Restore last nuked content"
+        echo "  Keybindings (Ctrl and Cmd do the same thing):"
+        echo "    Ctrl+A / Cmd+A  Select entire buffer"
+        echo "    Ctrl+K / Cmd+K  Nuke buffer (with undo cache)"
+        echo "    Ctrl+Z / Cmd+Z  Restore last nuked content"
         echo ""
         echo "  Restart your shell or run: source ~/.zshrc"
     else
         echo "\033[91m[flowgram]\033[0m Installation failed!"
-        echo "           Could not write to: $zshrc_path"
+        echo ""
+        echo "  Manual install - add this line to your shell config:"
+        echo "    $source_line"
         return 1
     fi
 }
